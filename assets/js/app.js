@@ -24,20 +24,13 @@ class QuoteGenerator {
         try {
             this.showLoading(true);
             
-            // Fetch quote from API using CORS proxy
-            const response = await fetch('https://api.allorigins.win/raw?url=https://zenquotes.io/api/random');
+            // Use JSONP to bypass CORS issues
+            const quote = await this.fetchQuoteWithJSONP();
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data && data.length > 0) {
-                const quote = data[0];
-                this.displayQuote(quote.q, quote.a);
+            if (quote && quote.quoteText && quote.quoteAuthor) {
+                this.displayQuote(quote.quoteText, quote.quoteAuthor);
             } else {
-                throw new Error('No quote data received');
+                throw new Error('Invalid quote data received');
             }
             
         } catch (error) {
@@ -49,20 +42,56 @@ class QuoteGenerator {
         }
     }
     
+    fetchQuoteWithJSONP() {
+        return new Promise((resolve, reject) => {
+            const callbackName = 'quoteCallback_' + Date.now();
+            const script = document.createElement('script');
+            
+            // Set up global callback function
+            window[callbackName] = function(data) {
+                document.head.removeChild(script);
+                delete window[callbackName];
+                resolve(data);
+            };
+            
+            script.src = `https://api.forismatic.com/api/1.0/?method=getQuote&format=jsonp&lang=en&jsonp=${callbackName}`;
+            
+            script.onerror = function() {
+                document.head.removeChild(script);
+                delete window[callbackName];
+                reject(new Error('JSONP request failed'));
+            };
+            
+            // Add timeout
+            setTimeout(() => {
+                if (document.head.contains(script)) {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    reject(new Error('Request timed out'));
+                }
+            }, 5000);
+            
+            document.head.appendChild(script);
+        });
+    }
+    
     displayQuote(text, author) {
         this.quoteText.textContent = `"${text}"`;
         this.quoteAuthor.textContent = author;
         
-        // Add fade-in effect
+        // Reset opacity and trigger reflow for smooth animation
         this.quoteText.style.opacity = '0';
         this.quoteAuthor.style.opacity = '0';
+        this.quoteText.offsetHeight; // Force reflow
         
-        setTimeout(() => {
-            this.quoteText.style.transition = 'opacity 0.5s ease';
-            this.quoteAuthor.style.transition = 'opacity 0.5s ease';
+        // Add fade-in effect
+        this.quoteText.style.transition = 'opacity 0.3s ease';
+        this.quoteAuthor.style.transition = 'opacity 0.3s ease';
+        
+        requestAnimationFrame(() => {
             this.quoteText.style.opacity = '1';
             this.quoteAuthor.style.opacity = '1';
-        }, 100);
+        });
     }
     
     async copyQuote() {
