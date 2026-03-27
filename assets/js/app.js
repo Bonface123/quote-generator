@@ -1,43 +1,31 @@
-const quoteText = document.getElementById("quote");
-const authorText = document.getElementById("author");
-const button = document.getElementById("newQuoteBtn");
-const copyBtn = document.getElementById("copyBtn");
-const loader = document.getElementById("loader");
-
-// Show loader
-function showLoader() {
-    loader.classList.remove("hidden");
-    quoteText.classList.add("opacity-0");
-    authorText.classList.add("opacity-0");
-}
-
-// Hide loader
-function hideLoader() {
-    loader.classList.add("hidden");
-    quoteText.classList.remove("opacity-0");
-    authorText.classList.remove("opacity-0");
-}
-
-
-// Fetch quote from API with retry logic
-async function getQuote() {
-    showLoader();
-
-    const maxRetries = 3;
-    const retryDelay = 1000; // 1 second
+// Quote Generator App
+class QuoteGenerator {
+    constructor() {
+        this.quoteText = document.getElementById('quoteText');
+        this.quoteAuthor = document.getElementById('quoteAuthor');
+        this.getQuoteBtn = document.getElementById('getQuoteBtn');
+        this.copyQuoteBtn = document.getElementById('copyQuoteBtn');
+        this.loading = document.getElementById('loading');
+        this.notification = document.getElementById('notification');
+        
+        this.init();
+    }
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    init() {
+        // Event listeners
+        this.getQuoteBtn.addEventListener('click', () => this.getQuote());
+        this.copyQuoteBtn.addEventListener('click', () => this.copyQuote());
+        
+        // Load initial quote
+        this.getQuote();
+    }
+    
+    async getQuote() {
         try {
-            console.log(`Attempt ${attempt} to fetch quote...`);
+            this.showLoading(true);
             
-            const response = await fetch("https://api.quotable.io/random", {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                mode: 'cors'
-            });
+            // Fetch quote from API using CORS proxy
+            const response = await fetch('https://api.allorigins.win/raw?url=https://zenquotes.io/api/random');
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -45,47 +33,97 @@ async function getQuote() {
             
             const data = await response.json();
             
-            quoteText.textContent = `"${data.content}"`;
-            authorText.textContent = `- ${data.author}`;
-            console.log("Quote loaded successfully!");
-            break; // Success, exit retry loop
+            if (data && data.length > 0) {
+                const quote = data[0];
+                this.displayQuote(quote.q, quote.a);
+            } else {
+                throw new Error('No quote data received');
+            }
             
         } catch (error) {
-            console.error(`Attempt ${attempt} failed:`, error.message);
+            console.error('Error fetching quote:', error);
+            this.showError('Failed to fetch quote. Please check your internet connection and try again.');
             
-            if (attempt === maxRetries) {
-                // Final attempt failed, show error message
-                quoteText.textContent = "Failed to load quote. Please check your internet connection and try again.";
-                authorText.textContent = "";
-                console.error("All retry attempts failed:", error);
-            } else {
-                // Wait before retrying
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-            }
+        } finally {
+            this.showLoading(false);
         }
     }
-
-    // Smooth UX delay
-    setTimeout(hideLoader, 300);
-}
-
-// Copy quote
-function copyQuote() {
-    const text = `${quoteText.textContent} ${authorText.textContent}`;
-
-    navigator.clipboard.writeText(text).then(() => {
-        copyBtn.textContent = "Copied!";
+    
+    displayQuote(text, author) {
+        this.quoteText.textContent = `"${text}"`;
+        this.quoteAuthor.textContent = author;
+        
+        // Add fade-in effect
+        this.quoteText.style.opacity = '0';
+        this.quoteAuthor.style.opacity = '0';
+        
         setTimeout(() => {
-            copyBtn.textContent = "Copy";
-        }, 1500);
-    }).catch(err => {
-        console.error("Copy failed:", err);
-    });
+            this.quoteText.style.transition = 'opacity 0.5s ease';
+            this.quoteAuthor.style.transition = 'opacity 0.5s ease';
+            this.quoteText.style.opacity = '1';
+            this.quoteAuthor.style.opacity = '1';
+        }, 100);
+    }
+    
+    async copyQuote() {
+        const quoteText = this.quoteText.textContent;
+        const authorText = this.quoteAuthor.textContent;
+        const fullQuote = `${quoteText} ${authorText}`;
+        
+        try {
+            await navigator.clipboard.writeText(fullQuote);
+            this.showNotification('Quote copied to clipboard!');
+        } catch (error) {
+            console.error('Error copying quote:', error);
+            
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = fullQuote;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            this.showNotification('Quote copied to clipboard!');
+        }
+    }
+    
+    showLoading(show) {
+        if (show) {
+            this.loading.classList.add('active');
+            this.getQuoteBtn.disabled = true;
+            this.getQuoteBtn.textContent = 'Loading...';
+        } else {
+            this.loading.classList.remove('active');
+            this.getQuoteBtn.disabled = false;
+            this.getQuoteBtn.textContent = 'Get New Quote';
+        }
+    }
+    
+    showNotification(message) {
+        this.notification.textContent = message;
+        this.notification.classList.add('show');
+        
+        setTimeout(() => {
+            this.notification.classList.remove('show');
+        }, 3000);
+    }
+    
+    showError(message) {
+        this.quoteText.textContent = message;
+        this.quoteAuthor.textContent = '';
+    }
 }
 
-// Event listeners
-button.addEventListener("click", getQuote);
-copyBtn.addEventListener("click", copyQuote);
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new QuoteGenerator();
+});
 
-// Load first quote on page load
-getQuote();
+// Handle keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) {
+        e.preventDefault();
+        document.getElementById('getQuoteBtn').click();
+    }
+});
